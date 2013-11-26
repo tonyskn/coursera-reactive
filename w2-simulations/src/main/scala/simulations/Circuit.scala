@@ -1,6 +1,7 @@
 package simulations
 
 import common._
+import scala.language.postfixOps
 
 class Wire {
   private var sigVal = false
@@ -36,6 +37,14 @@ abstract class CircuitSimulator extends Simulator {
     }
   }
 
+  def transfer(input: Wire, output: Wire) {
+    def transferAction() {
+      val inputSig = input.getSignal
+      afterDelay(0) { output.setSignal(inputSig) }
+    }
+    input addAction transferAction
+  }
+
   def inverter(input: Wire, output: Wire) {
     def invertAction() {
       val inputSig = input.getSignal
@@ -59,15 +68,40 @@ abstract class CircuitSimulator extends Simulator {
   //
 
   def orGate(a1: Wire, a2: Wire, output: Wire) {
-    ???
+    def orAction() {
+      val a1Sig = a1.getSignal
+      val a2Sig = a2.getSignal
+      afterDelay(OrGateDelay) { output.setSignal(a1Sig | a2Sig) }
+    }
+    a1 addAction orAction
+    a2 addAction orAction
   }
   
   def orGate2(a1: Wire, a2: Wire, output: Wire) {
-    ???
+    val a1i, a2i, a1i_and_a2i = new Wire
+    inverter(a1, a1i)
+    inverter(a2, a2i)
+    andGate(a1i, a2i, a1i_and_a2i)
+    inverter(a1i_and_a2i, output)
   }
 
   def demux(in: Wire, c: List[Wire], out: List[Wire]) {
-    ???
+    (c, out) match {
+      case (List(), List(out0)) => transfer(in, out0)
+      case (List(c0), List(out1, out0)) => {
+        val notC0 = new Wire
+        inverter(c0, notC0)
+        andGate(in, notC0, out0)
+        andGate(in, c0   , out1)
+      }
+      case (cn :: cs, _) => {
+        val (firstHalf, secondHalf) = out.splitAt(out.size / 2);
+        val stage0, stage1 = new Wire
+        demux(in, List(cn), List(stage1, stage0))
+        demux(stage1, cs, firstHalf)
+        demux(stage0, cs, secondHalf)
+      }
+    }
   }
 
 }
@@ -94,12 +128,62 @@ object Circuit extends CircuitSimulator {
     run
   }
 
-  //
-  // to complete with orGateExample and demuxExample...
-  //
+  def orGateExample {
+    val in1, in2, out = new Wire
+    orGate(in1, in2, out)
+    probe("in1", in1)
+    probe("in2", in2)
+    probe("out", out)
+    in1.setSignal(false)
+    in2.setSignal(false)
+    run
+
+    in1.setSignal(true)
+    run
+
+    in2.setSignal(true)
+    run
+  }
+
+  def orGate2Example {
+    val in1, in2, out = new Wire
+    orGate2(in1, in2, out)
+    probe("in1", in1)
+    probe("in2", in2)
+    probe("out", out)
+    in1.setSignal(false)
+    in2.setSignal(false)
+    run
+
+    in1.setSignal(true)
+    run
+
+    in2.setSignal(true)
+    run
+  }
+
+  def dmuxExample {
+    val in = new Wire
+    val c = for { i <- 0 until 4 toList } yield new Wire
+    val out = for { i <- 0 until 16 toList } yield new Wire
+    demux(in, c, out)
+    probe("in", in)
+
+    for ((_c, i) <- c.zipWithIndex) probe("c"+(c.size-1-i), _c)
+    for ((_o, i) <- out.zipWithIndex) probe("o"+(out.size-1-i), _o)
+
+    run
+
+    in.setSignal(true); run
+    c.head.setSignal(true); run
+    c.head.setSignal(false); c.last.setSignal(true); run
+  }
 }
 
 object CircuitMain extends App {
   // You can write tests either here, or better in the test class CircuitSuite.
   Circuit.andGateExample
+  Circuit.orGateExample
+  Circuit.orGate2Example
+  Circuit.dmuxExample
 }
