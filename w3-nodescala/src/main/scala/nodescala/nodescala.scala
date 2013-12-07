@@ -29,7 +29,12 @@ trait NodeScala {
    *  @param token        the cancellation token for
    *  @param body         the response to write back
    */
-  private def respond(exchange: Exchange, token: CancellationToken, response: Response): Unit = ???
+  private def respond(exchange: Exchange, token: CancellationToken, response: Response): Unit = {
+    while (token.nonCancelled && response.hasNext) {
+      exchange write response.next
+    }
+    exchange.close
+  }
 
   /** A server:
    *  1) creates and starts an http listener
@@ -41,8 +46,17 @@ trait NodeScala {
    *  @param handler        a function mapping a request to a response
    *  @return               a subscription that can stop the server and all its asynchronous operations *entirely*.
    */
-  def start(relativePath: String)(handler: Request => Response): Subscription = ???
-
+  def start(relativePath: String)(handler: Request => Response): Subscription = {
+    val listener = createListener(relativePath)    
+    Subscription(
+      listener.start,
+      Future.run() { ct => async {
+        while (ct.nonCancelled) {
+          val (req, exch) = await { listener.nextRequest }
+          respond(exch, ct, handler(req))
+      }}}
+    )
+  }
 }
 
 
@@ -111,7 +125,11 @@ object NodeScala {
      *  @param relativePath    the relative path on which we want to listen to requests
      *  @return                the promise holding the pair of a request and an exchange object
      */
-    def nextRequest(): Future[(Request, Exchange)] = ???
+    def nextRequest(): Future[(Request, Exchange)] = {
+      val p = Promise[(Request, Exchange)]()
+      createContext { exchange => p success (exchange.request, exchange); removeContext() }
+      p.future
+    }
   }
 
   object Listener {
