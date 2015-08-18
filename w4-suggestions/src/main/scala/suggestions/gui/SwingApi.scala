@@ -54,21 +54,16 @@ trait SwingApi {
       * @param field the text field
       * @return an observable with a stream of text field updates
       */
-    def textValues: Observable[String] = {
-      Observable[String]((observer: Observer[String]) => {
-        field subscribe {
-          case ValueChanged(tf) => observer.onNext(tf.text)
-          case _ => ()
-        }
-
-        Subscription {
-          field unsubscribe {
-            case ValueChanged(tf) => observer.onCompleted
-            case _ => ()
-          }
-        }
-      })
-    }
+    def textValues: Observable[String] = Observable.create(observer => {
+      val subFun: Reaction = {
+        case e: ValueChanged => observer.onNext(field.text)
+        case _ => ()
+      }
+      field.subscribe(subFun)
+      Subscription {
+        field.unsubscribe(subFun)
+      }
+    })
 
   }
 
@@ -79,21 +74,16 @@ trait SwingApi {
      * @param field the button
      * @return an observable with a stream of buttons that have been clicked
      */
-    def clicks: Observable[Button] = {
-      Observable[Button]((observer: Observer[Button]) => {
-        button subscribe {
-          case ButtonClicked(btn) => observer.onNext(btn)
-          case _ => ()
-        }
-
-        Subscription {
-          button unsubscribe {
-            case ButtonClicked(btn) => observer.onCompleted
-            case _ => ()
-          }
-        }
-      })
-    }
+    def clicks: Observable[Button] = Observable.create(observer => {
+      val subFun: Reaction = {
+        case e: ButtonClicked => observer.onNext(button)
+        case _ => ()
+      }
+      button.subscribe(subFun)
+      Subscription {
+        button.unsubscribe(subFun)
+      }
+    })
 
   }
 
